@@ -2,16 +2,16 @@
 {
     static async Task Main(string[] args)
     {
-        //await TestGenericMode();
-        //await TestTableMode();
-        //await TestJsonLdMode();
-        //await TestNewLineConversionOptions();
-        //await TestAttributePrefixOptions();
-        //await TestTextPropertyNameOptions();
-        //await TestIndentationOptions();
-        //await TestUnescapeJsonOption();
-        //await TestTrimInsideWordsOption();
-        //await TestConvertAllTablesOption();
+        await TestGenericMode();
+        await TestTableMode();
+        await TestJsonLdMode();
+        await TestNewLineConversionOptions();
+        await TestAttributePrefixOptions();
+        await TestTextPropertyNameOptions();
+        await TestIndentationOptions();
+        await TestUnescapeJsonOption();
+        await TestTrimInsideWordsOption();
+        await TestConvertAllTablesOption();
         await TestJsonToHtmlConversion();
     }
 
@@ -248,5 +248,4 @@
         Console.WriteLine(convertedHtml);
         Console.WriteLine();
     }
-
 }

@@ -6,6 +6,12 @@ using System.Text.RegularExpressions;
 
 public class HtmlToJsonParser
 {
+    private static readonly HashSet<string> VoidElements = new HashSet<string>
+    {
+        "area", "base", "br", "col", "embed", "hr", "img", "input",
+        "link", "meta", "param", "source", "track", "wbr"
+    };
+
     public enum ParserMode
     {
         Generic,
@@ -32,6 +38,10 @@ public class HtmlToJsonParser
         public bool UnescapeJson { get; set; } = false;
         public bool TrimInsideWords { get; set; } = false;
         public bool ConvertAllTables { get; set; } = false;
+        public bool PreserveEmptyAttributes { get; set; } = false;
+        public bool BooleanAttributesAsFlags { get; set; } = false;
+        public bool PreserveNamespaces { get; set; } = false;
+        public Action<string> LogAction { get; set; }
     }
 
     public static async Task<string> ParseHtmlToJson(string html, ParserMode mode, ParserOptions options = null)
@@ -52,7 +62,7 @@ public class HtmlToJsonParser
         switch (mode)
         {
             case ParserMode.Generic:
-                result = ParseNodeGeneric(document.DocumentElement, options);
+                result = CreateJObjectFromKeyValuePairs(ParseNodeGeneric(document.DocumentElement, options));
                 break;
             case ParserMode.Table:
                 result = ParseTables(document, options);
@@ -67,66 +77,95 @@ public class HtmlToJsonParser
         return JsonConvert.SerializeObject(result, options.Indent ? Formatting.Indented : Formatting.None);
     }
 
-    private static JObject ParseNodeGeneric(IElement element, ParserOptions options)
+    private static JObject CreateJObjectFromKeyValuePairs(List<KeyValuePair<string, JToken>> pairs)
     {
-        var result = new JObject();
+        var jObject = new JObject();
+        foreach (var pair in pairs)
+        {
+            jObject.Add(pair.Key, pair.Value);
+        }
+        return jObject;
+    }
+
+    private static List<KeyValuePair<string, JToken>> ParseNodeGeneric(IElement element, ParserOptions options)
+    {
+        options.LogAction?.Invoke($"Processing element: {element.TagName}");
+
+        var result = new List<KeyValuePair<string, JToken>>();
 
         // Add attributes
         foreach (var attr in element.Attributes)
         {
+            if (!options.PreserveEmptyAttributes && string.IsNullOrEmpty(attr.Value))
+                continue;
+
             var key = string.IsNullOrEmpty(options.AttributePrefix) ? attr.Name.ToLower() : options.AttributePrefix + attr.Name.ToLower();
-            result.Add(key, attr.Value);
+            var value = options.BooleanAttributesAsFlags && string.IsNullOrEmpty(attr.Value) ? true : (object)attr.Value;
+            result.Add(new KeyValuePair<string, JToken>(key, JToken.FromObject(value)));
         }
 
-        // Process child nodes
-        var childElements = element.Children.ToList();
-        var textNodes = element.ChildNodes.OfType<IText>()
-            .Where(t => !string.IsNullOrWhiteSpace(t.TextContent))
+        if (options.PreserveNamespaces && !string.IsNullOrEmpty(element.NamespaceUri))
+        {
+            result.Add(new KeyValuePair<string, JToken>("@xmlns", element.NamespaceUri));
+        }
+
+        if (VoidElements.Contains(element.TagName.ToLower()))
+        {
+            return result;
+        }
+
+        // Handle child nodes
+        var childContent = HandleChildNodes(element.ChildNodes, options);
+        if (childContent != null)
+        {
+            result.Add(new KeyValuePair<string, JToken>(element.TagName.ToLower(), childContent));
+        }
+
+        // Handle comments
+        var comments = element.ChildNodes.OfType<IComment>().ToList();
+        if (comments.Any())
+        {
+            result.Add(new KeyValuePair<string, JToken>("comments", new JArray(comments.Select(c => c.TextContent))));
+        }
+
+        // Handle CDATA sections
+        var cdataSections = element.ChildNodes
+            .Where(n => n.NodeType == NodeType.CharacterData)
+            .Select(n => n.TextContent)
             .ToList();
-
-        if (childElements.Count > 0)
+        if (cdataSections.Any())
         {
-            var groupedChildren = childElements.GroupBy(e => e.TagName.ToLower());
-
-            foreach (var group in groupedChildren)
-            {
-                if (group.Count() == 1)
-                {
-                    var childContent = ParseNodeGeneric(group.First(), options);
-                    if (childContent.Count == 1 && childContent.Properties().First().Name == options.TextPropertyName)
-                    {
-                        result.Add(group.Key, childContent[options.TextPropertyName]);
-                    }
-                    else
-                    {
-                        result.Add(group.Key, childContent);
-                    }
-                }
-                else
-                {
-                    result.Add(group.Key, new JArray(group.Select(e => ParseNodeGeneric(e, options))));
-                }
-            }
-        }
-
-        if (textNodes.Count > 0)
-        {
-            var combinedText = string.Join(" ", textNodes.Select(t => ProcessText(t.TextContent, options)));
-            if (childElements.Count == 0 && result.Count == 0)
-            {
-                // If there are no child elements and no attributes, set the text content directly
-                return new JObject { { options.TextPropertyName, combinedText } };
-            }
-            else
-            {
-                // If there are child elements or attributes, add the text content as a property
-                result.Add(options.TextPropertyName, combinedText);
-            }
+            result.Add(new KeyValuePair<string, JToken>("cdata", new JArray(cdataSections)));
         }
 
         return result;
     }
 
+    private static JToken HandleChildNodes(INodeList childNodes, ParserOptions options)
+    {
+        var textNodes = childNodes.OfType<IText>().Where(t => !string.IsNullOrWhiteSpace(t.TextContent)).ToList();
+        var elementNodes = childNodes.OfType<IElement>().ToList();
+
+        if (!elementNodes.Any() && textNodes.Count == 1)
+        {
+            return ProcessText(textNodes[0].TextContent, options);
+        }
+
+        var result = new JArray();
+        foreach (var node in childNodes)
+        {
+            if (node is IText textNode && !string.IsNullOrWhiteSpace(textNode.TextContent))
+            {
+                result.Add(ProcessText(textNode.TextContent, options));
+            }
+            else if (node is IElement elementNode)
+            {
+                result.Add(CreateJObjectFromKeyValuePairs(ParseNodeGeneric(elementNode, options)));
+            }
+        }
+
+        return result.Count > 0 ? result : null;
+    }
 
     private static JToken ParseTables(IDocument document, ParserOptions options)
     {

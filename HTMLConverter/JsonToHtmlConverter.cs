@@ -1,80 +1,94 @@
 ﻿using Newtonsoft.Json.Linq;
 using System.Text;
+using System.Web;
 
 public class JsonToHtmlConverter
 {
     public static string ConvertJsonToHtml(string json)
     {
         var jObject = JObject.Parse(json);
-        return ConvertObjectToHtml(jObject);
+        return ConvertJObjectToHtml(jObject);
     }
 
-    private static string ConvertObjectToHtml(JObject obj)
+    private static string ConvertJObjectToHtml(JObject obj)
     {
         var sb = new StringBuilder();
 
         foreach (var prop in obj.Properties())
         {
-            sb.Append($"<{prop.Name}");
-
-            if (prop.Value is JObject childObj)
-            {
-                // Add attributes
-                foreach (var childProp in childObj.Properties())
-                {
-                    if (childProp.Name.StartsWith("@"))
-                    {
-                        sb.Append($" {childProp.Name.Substring(1)}=\"{childProp.Value}\"");
-                    }
-                }
-
-                sb.Append(">");
-
-                // Add content
-                foreach (var childProp in childObj.Properties())
-                {
-                    if (!childProp.Name.StartsWith("@"))
-                    {
-                        sb.Append(ConvertTokenToHtml(childProp.Value));
-                    }
-                }
-
-                sb.Append($"</{prop.Name}>");
-            }
-            else
-            {
-                sb.Append(">");
-                sb.Append(ConvertTokenToHtml(prop.Value));
-                sb.Append($"</{prop.Name}>");
-            }
+            sb.Append(ConvertPropertyToHtml(prop.Name, prop.Value));
         }
 
         return sb.ToString();
     }
 
-    private static string ConvertTokenToHtml(JToken token)
+    private static string ConvertPropertyToHtml(string name, JToken value)
     {
-        if (token is JObject obj)
+        if (name.StartsWith("@"))
         {
-            return ConvertObjectToHtml(obj);
+            return ""; // Attributes are handled separately
         }
-        else if (token is JArray arr)
-        {
-            return ConvertArrayToHtml(arr);
-        }
-        else
-        {
-            return token.ToString();
-        }
-    }
 
-    private static string ConvertArrayToHtml(JArray arr)
-    {
         var sb = new StringBuilder();
-        foreach (var item in arr)
+        sb.Append($"<{name}");
+
+        // Handle attributes
+        if (value is JObject childObj)
         {
-            sb.Append(ConvertTokenToHtml(item));
+            foreach (var attr in childObj.Properties().Where(p => p.Name.StartsWith("@")))
+            {
+                sb.Append($" {attr.Name.Substring(1)}=\"{HttpUtility.HtmlAttributeEncode(attr.Value.ToString())}\"");
+            }
         }
+
+        sb.Append(">");
+
+        // Handle content
+        if (value is JValue jValue)
+        {
+            sb.Append(HttpUtility.HtmlEncode(jValue.ToString()));
+        }
+        else if (value is JObject jObject)
+        {
+            // Handle text content
+            if (jObject.ContainsKey("#text"))
+            {
+                sb.Append(HttpUtility.HtmlEncode(jObject["#text"].ToString()));
+            }
+
+            // Handle child elements
+            foreach (var prop in jObject.Properties().Where(p => !p.Name.StartsWith("@") && p.Name != "#text"))
+            {
+                sb.Append(ConvertPropertyToHtml(prop.Name, prop.Value));
+            }
+        }
+        else if (value is JArray jArray)
+        {
+            foreach (var item in jArray)
+            {
+                if (item is JObject itemObj)
+                {
+                    sb.Append(ConvertJObjectToHtml(itemObj));
+                }
+                else if (item is JValue itemValue)
+                {
+                    sb.Append(HttpUtility.HtmlEncode(itemValue.ToString()));
+                }
+            }
+        }
+
+        // Handle void elements
+        if (!IsVoidElement(name))
+        {
+            sb.Append($"</{name}>");
+        }
+
         return sb.ToString();
+    }
+
+    private static bool IsVoidElement(string tagName)
+    {
+        var voidElements = new[] { "area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr" };
+        return voidElements.Contains(tagName.ToLower());
     }
 }
