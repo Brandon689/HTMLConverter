@@ -2,16 +2,17 @@
 {
     static async Task Main(string[] args)
     {
-        await TestGenericMode();
-        await TestTableMode();
-        await TestJsonLdMode();
-        await TestNewLineConversionOptions();
-        await TestAttributePrefixOptions();
-        await TestTextPropertyNameOptions();
-        await TestIndentationOptions();
-        await TestUnescapeJsonOption();
-        await TestTrimInsideWordsOption();
-        await TestConvertAllTablesOption();
+        //await TestGenericMode();
+        //await TestTableMode();
+        //await TestJsonLdMode();
+        //await TestNewLineConversionOptions();
+        //await TestAttributePrefixOptions();
+        //await TestTextPropertyNameOptions();
+        //await TestIndentationOptions();
+        //await TestUnescapeJsonOption();
+        //await TestTrimInsideWordsOption();
+        //await TestConvertAllTablesOption();
+        await TestJsonToHtmlConversion();
     }
 
     static async Task TestGenericMode()
@@ -224,4 +225,28 @@
         Console.WriteLine(result);
         Console.WriteLine();
     }
+
+    static async Task TestJsonToHtmlConversion()
+    {
+        Console.WriteLine("Testing JSON to HTML Conversion:");
+        string html = @"
+    <html>
+    <body>
+    <div id='content'>
+        <h1>Hello, World!</h1>
+        <p>This is a test.</p>
+    </div>
+    </body>
+    </html>";
+
+        var jsonResult = await HtmlToJsonParser.ParseHtmlToJson(html, HtmlToJsonParser.ParserMode.Generic);
+        Console.WriteLine("JSON result:");
+        Console.WriteLine(jsonResult);
+
+        var convertedHtml = JsonToHtmlConverter.ConvertJsonToHtml(jsonResult);
+        Console.WriteLine("\nConverted back to HTML:");
+        Console.WriteLine(convertedHtml);
+        Console.WriteLine();
+    }
+
 }

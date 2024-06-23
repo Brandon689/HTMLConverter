@@ -92,7 +92,15 @@ public class HtmlToJsonParser
             {
                 if (group.Count() == 1)
                 {
-                    result.Add(group.Key, ParseNodeGeneric(group.First(), options));
+                    var childContent = ParseNodeGeneric(group.First(), options);
+                    if (childContent.Count == 1 && childContent.Properties().First().Name == options.TextPropertyName)
+                    {
+                        result.Add(group.Key, childContent[options.TextPropertyName]);
+                    }
+                    else
+                    {
+                        result.Add(group.Key, childContent);
+                    }
                 }
                 else
                 {
@@ -104,20 +112,21 @@ public class HtmlToJsonParser
         if (textNodes.Count > 0)
         {
             var combinedText = string.Join(" ", textNodes.Select(t => ProcessText(t.TextContent, options)));
-            if (childElements.Count == 0)
+            if (childElements.Count == 0 && result.Count == 0)
             {
-                // If there are no child elements, set the text content directly
-                return new JObject { { element.TagName.ToLower(), combinedText } };
+                // If there are no child elements and no attributes, set the text content directly
+                return new JObject { { options.TextPropertyName, combinedText } };
             }
             else
             {
-                // If there are child elements, add the text content as a property
+                // If there are child elements or attributes, add the text content as a property
                 result.Add(options.TextPropertyName, combinedText);
             }
         }
 
         return result;
     }
+
 
     private static JToken ParseTables(IDocument document, ParserOptions options)
     {
