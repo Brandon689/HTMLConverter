@@ -3,16 +3,16 @@
     static async Task Main(string[] args)
     {
         await TestGenericMode();
-        await TestTableMode();
-        await TestJsonLdMode();
-        await TestNewLineConversionOptions();
-        await TestAttributePrefixOptions();
-        await TestTextPropertyNameOptions();
-        await TestIndentationOptions();
-        await TestUnescapeJsonOption();
-        await TestTrimInsideWordsOption();
-        await TestConvertAllTablesOption();
-        await TestJsonToHtmlConversion();
+        //await TestTableMode();
+        //await TestJsonLdMode();
+        //await TestNewLineConversionOptions();
+        //await TestAttributePrefixOptions();
+        //await TestTextPropertyNameOptions();
+        //await TestIndentationOptions();
+        //await TestUnescapeJsonOption();
+        //await TestTrimInsideWordsOption();
+        //await TestConvertAllTablesOption();
+        //await TestJsonToHtmlConversion();
     }
 
     static async Task TestGenericMode()
@@ -22,12 +22,13 @@
         <html>
         <body>
         <div id='content'>
+            <img src='wpee.pjpg'/>
             <h1>Hello, World!</h1>
             <p>This is a test.</p>
         </div>
         </body>
         </html>";
-
+        html = "<div class=\"mw-parser-output\"><p><span>d</span></p></div>";
         var result = await HtmlToJsonParser.ParseHtmlToJson(html, HtmlToJsonParser.ParserMode.Generic);
         Console.WriteLine(result);
         Console.WriteLine();
@@ -246,6 +247,16 @@
         var convertedHtml = JsonToHtmlConverter.ConvertJsonToHtml(jsonResult);
         Console.WriteLine("\nConverted back to HTML:");
         Console.WriteLine(convertedHtml);
+        Console.WriteLine();
+    }
+
+    static async Task TestGenericModeFromFile(string filePath)
+    {
+        Console.WriteLine("Testing Generic Mode file:");
+        string html = File.ReadAllText(filePath);
+
+        var result = await HtmlToJsonParser.ParseHtmlToJson(html, HtmlToJsonParser.ParserMode.Generic);
+        Console.WriteLine(result);
         Console.WriteLine();
     }
 }

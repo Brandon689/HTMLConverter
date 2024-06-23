@@ -41,6 +41,8 @@ public class HtmlToJsonParser
         public bool PreserveEmptyAttributes { get; set; } = false;
         public bool BooleanAttributesAsFlags { get; set; } = false;
         public bool PreserveNamespaces { get; set; } = false;
+        public bool SkipClassAttributes { get; set; } = false;
+        public bool SkipAllAttributes { get; set; } = false;
         public Action<string> LogAction { get; set; }
     }
 
@@ -90,23 +92,28 @@ public class HtmlToJsonParser
     private static List<KeyValuePair<string, JToken>> ParseNodeGeneric(IElement element, ParserOptions options)
     {
         options.LogAction?.Invoke($"Processing element: {element.TagName}");
-
         var result = new List<KeyValuePair<string, JToken>>();
 
         // Add attributes
-        foreach (var attr in element.Attributes)
+        if (!options.SkipAllAttributes)
         {
-            if (!options.PreserveEmptyAttributes && string.IsNullOrEmpty(attr.Value))
-                continue;
+            foreach (var attr in element.Attributes)
+            {
+                if (options.SkipClassAttributes && attr.Name.ToLower() == "class")
+                    continue;
 
-            var key = string.IsNullOrEmpty(options.AttributePrefix) ? attr.Name.ToLower() : options.AttributePrefix + attr.Name.ToLower();
-            var value = options.BooleanAttributesAsFlags && string.IsNullOrEmpty(attr.Value) ? true : (object)attr.Value;
-            result.Add(new KeyValuePair<string, JToken>(key, JToken.FromObject(value)));
-        }
+                if (!options.PreserveEmptyAttributes && string.IsNullOrEmpty(attr.Value))
+                    continue;
 
-        if (options.PreserveNamespaces && !string.IsNullOrEmpty(element.NamespaceUri))
-        {
-            result.Add(new KeyValuePair<string, JToken>("@xmlns", element.NamespaceUri));
+                var key = string.IsNullOrEmpty(options.AttributePrefix) ? attr.Name.ToLower() : options.AttributePrefix + attr.Name.ToLower();
+                var value = options.BooleanAttributesAsFlags && string.IsNullOrEmpty(attr.Value) ? true : (object)attr.Value;
+                result.Add(new KeyValuePair<string, JToken>(key, JToken.FromObject(value)));
+            }
+
+            if (options.PreserveNamespaces && !string.IsNullOrEmpty(element.NamespaceUri))
+            {
+                result.Add(new KeyValuePair<string, JToken>("@xmlns", element.NamespaceUri));
+            }
         }
 
         if (VoidElements.Contains(element.TagName.ToLower()))
@@ -118,7 +125,15 @@ public class HtmlToJsonParser
         var childContent = HandleChildNodes(element.ChildNodes, options);
         if (childContent != null)
         {
-            result.Add(new KeyValuePair<string, JToken>(element.TagName.ToLower(), childContent));
+            // If childContent is a JArray with only one item, unwrap it
+            if (childContent is JArray childArray && childArray.Count == 1)
+            {
+                result.Add(new KeyValuePair<string, JToken>(element.TagName.ToLower(), childArray[0]));
+            }
+            else
+            {
+                result.Add(new KeyValuePair<string, JToken>(element.TagName.ToLower(), childContent));
+            }
         }
 
         // Handle comments
@@ -140,6 +155,7 @@ public class HtmlToJsonParser
 
         return result;
     }
+
 
     private static JToken HandleChildNodes(INodeList childNodes, ParserOptions options)
     {

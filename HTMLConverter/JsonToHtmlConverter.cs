@@ -16,7 +16,10 @@ public class JsonToHtmlConverter
 
         foreach (var prop in obj.Properties())
         {
-            sb.Append(ConvertPropertyToHtml(prop.Name, prop.Value));
+            if (prop.Name != "comments") // Skip the comments property
+            {
+                sb.Append(ConvertPropertyToHtml(prop.Name, prop.Value));
+            }
         }
 
         return sb.ToString();
@@ -24,9 +27,9 @@ public class JsonToHtmlConverter
 
     private static string ConvertPropertyToHtml(string name, JToken value)
     {
-        if (name.StartsWith("@"))
+        if (name.StartsWith("@") || name == "comments")
         {
-            return ""; // Attributes are handled separately
+            return ""; // Attributes and comments are handled separately
         }
 
         var sb = new StringBuilder();
@@ -39,6 +42,18 @@ public class JsonToHtmlConverter
             {
                 sb.Append($" {attr.Name.Substring(1)}=\"{HttpUtility.HtmlAttributeEncode(attr.Value.ToString())}\"");
             }
+        }
+
+        // Special handling for img elements
+        if (name.ToLower() == "img")
+        {
+            // Ensure src attribute is present
+            if (value is JObject imgObj && imgObj.ContainsKey("@src"))
+            {
+                sb.Append($" src=\"{HttpUtility.HtmlAttributeEncode(imgObj["@src"].ToString())}\"");
+            }
+            sb.Append(">");
+            return sb.ToString(); // Return early for img elements
         }
 
         sb.Append(">");
@@ -57,7 +72,7 @@ public class JsonToHtmlConverter
             }
 
             // Handle child elements
-            foreach (var prop in jObject.Properties().Where(p => !p.Name.StartsWith("@") && p.Name != "#text"))
+            foreach (var prop in jObject.Properties().Where(p => !p.Name.StartsWith("@") && p.Name != "#text" && p.Name != "comments"))
             {
                 sb.Append(ConvertPropertyToHtml(prop.Name, prop.Value));
             }
@@ -85,6 +100,7 @@ public class JsonToHtmlConverter
 
         return sb.ToString();
     }
+
 
     private static bool IsVoidElement(string tagName)
     {
